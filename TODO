@@ -1,0 +1,16 @@
+/
+	<torrent name>/
+		events
+		config/
+			limits/
+				// needs love
+			…
+		contents/
+		peers/
+		backend-path
+		…
+	…
+	config/
+		default-torrent/
+			…
+	events
