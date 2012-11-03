@@ -68,7 +68,10 @@ readTorrent fn = do
 	let maybeData = bRead f
 	when (isNothing maybeData) $ throw $ userError "the file is not bencoded"
 	let dict = bDict $ fromJust maybeData
-	let al = (map bString . bList) =<< (bList $ fromJust $ lookup "announce-list" dict)
+	let mal = lookup "announce-list" dict
+	let al = if isJust mal
+		then (map bString . bList) =<< (bList $ fromJust mal)
+		else [bString $ fromJust $ lookup "announce" dict]
 	let binfo = fromJust $ lookup "info" dict
 	let ih = hash $ B.unpack $ bPack binfo
 	let info = bDict $ binfo
