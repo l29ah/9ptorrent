@@ -12,6 +12,7 @@ import Data.Word
 import Network.HTTP hiding (Response)	-- HTTP doesn't support IPv6; using only urlencode from it
 --import Network.Curl	-- Curl breaks responses at unusual symbols
 import Network.Curl.Download
+import Numeric
 
 import Torrent
 import TorrentFile
@@ -69,11 +70,14 @@ decodeResponse :: ByteString -> Either ByteString Response
 decodeResponse b = let	md = bRead b
 			d = bDict $ fromJust md
 			fail = M.lookup "failure reason" d in
-	if isNothing md then Left "can't decode bencoded tracker answer" else if isJust fail then Left $ bString $ fromJust fail else
-		Right Response {
-			interval = fromIntegral $ bInt $ fromJust $ M.lookup "interval" d,
-			minInterval = 0,
-			peers = parsePeers_ d}
+	if isNothing md 
+		then Left "can't decode bencoded tracker answer"
+		else if isJust fail
+			then Left $ bString $ fromJust fail
+			else Right Response {
+					interval = fromIntegral $ bInt $ fromJust $ M.lookup "interval" d,
+					minInterval = maybe 0 (fromIntegral . bInt) $ M.lookup "min interval" d,
+					peers = parsePeers_ d }
 
 parsePeers_ :: M.Map String BEncode -> [RPeer]
 parsePeers_ d = let	mp4 = M.lookup "peers" d
@@ -106,22 +110,22 @@ getCompactPeer4 = do
 
 getCompactPeer6 :: Get RPeer
 getCompactPeer6 = do
-	i1 <- getWord8
-	i2 <- getWord8
-	i3 <- getWord8
-	i4 <- getWord8
-	i5 <- getWord8
-	i6 <- getWord8
-	i7 <- getWord8
-	i8 <- getWord8
-	i9 <- getWord8
-	i10 <- getWord8
-	i11 <- getWord8
-	i12 <- getWord8
-	i13 <- getWord8
-	i14 <- getWord8
-	i15 <- getWord8
-	i16 <- getWord8
+	let s = showHex
+	i1 <- getWord16be
+	i2 <- getWord16be
+	i3 <- getWord16be
+	i4 <- getWord16be
+	i5 <- getWord16be
+	i6 <- getWord16be
+	i7 <- getWord16be
+	i8 <- getWord16be
 	p <- getWord16be
-	-- TODO ipv6 address packing
-	return ("", B.pack $ show i1 ++ "." ++ show i2 ++ "." ++ show i3 ++ "." ++ show i4, p)
+	return ("", B.pack $
+			s i1 ":" ++
+			s i2 ":" ++
+			s i3 ":" ++
+			s i4 ":" ++
+			s i5 ":" ++
+			s i6 ":" ++
+			s i7 ":" ++
+			s i8 [], p)
