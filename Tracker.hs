@@ -12,13 +12,18 @@ import Data.Word
 import Network.HTTP hiding (Response)	-- HTTP doesn't support IPv6; using only urlencode from it
 --import Network.Curl	-- Curl breaks responses at unusual symbols
 import Network.Curl.Download
+import Network
 import Numeric
 
 import Torrent
 import TorrentFile
 import BEncode
 
-type RPeer = (ByteString, ByteString, Word16)
+data RPeer = RPeer {
+	id :: ByteString,
+	host :: HostName,
+	port :: Word16
+} deriving Show
 
 data Response = Response {
 	interval :: Word32,
@@ -106,7 +111,7 @@ getCompactPeer4 = do
 	i3 <- getWord8
 	i4 <- getWord8
 	p <- getWord16be
-	return ("", B.pack $ show i1 ++ "." ++ show i2 ++ "." ++ show i3 ++ "." ++ show i4, p)
+	return $ RPeer "" (show i1 ++ "." ++ show i2 ++ "." ++ show i3 ++ "." ++ show i4) p
 
 getCompactPeer6 :: Get RPeer
 getCompactPeer6 = do
@@ -120,7 +125,7 @@ getCompactPeer6 = do
 	i7 <- getWord16be
 	i8 <- getWord16be
 	p <- getWord16be
-	return ("", B.pack $
+	return $ RPeer "" (
 			s i1 ":" ++
 			s i2 ":" ++
 			s i3 ":" ++
@@ -128,4 +133,4 @@ getCompactPeer6 = do
 			s i5 ":" ++
 			s i6 ":" ++
 			s i7 ":" ++
-			s i8 [], p)
+			s i8 []) p
