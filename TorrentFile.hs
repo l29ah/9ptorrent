@@ -1,21 +1,19 @@
 module TorrentFile 
 	( TorrentFile(..)
 	, readTorrent
-	, hashByteString
 	) where
 
 import Control.Exception
 import Control.Monad
-import Data.Bits
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as B
-import Data.Digest.SHA1
 import Data.Map hiding (map)
 import Data.Maybe
 import Data.Word
 import Prelude hiding (readFile, lookup)
 
 import BEncode
+import Types
 
 {-
 BDict (fromList [
@@ -43,25 +41,6 @@ BDict (fromList [
 		("pieces",BString (Chunk "L\137\161K\181\152\217\183\CANC(s\163Y\\\242\DC4\177\191\191\203u\206\EM\146p{bZ\255e\STX%\SYNK\250vA\EM\214$\225%\199\253\128\NULG\213\241\161\138>\219\nN\"\ACK\138\182" Empty))]))])
 -}
 
-data TorrentFile = TorrentFile {
-	trackers :: [ByteString],
-	name :: ByteString,
-	length :: Word64,
-	pieceLength :: Word64,
-	pieces :: ByteString,
-	infoHash :: Word160
-} deriving Show
-
--- stolen from http://searchco.de/codesearch/view/14988216
--- | Convert a Word160 into a ByteString.
-hashByteString :: Word160 -> ByteString
-hashByteString hash =
-		B.pack $ concat $ map toBytes $ toWords hash
-	where
-		toWords (Word160 a b c d e) = a : b : c : d : e : []
-		toBytes a = (w (s a 24)) : (w (s a 16)) : (w (s a 8)) : (w a) : []
-			where w = fromIntegral; s = shiftR
-
 readTorrent :: FilePath -> IO TorrentFile
 readTorrent fn = do
 	f <- B.readFile fn
@@ -73,7 +52,7 @@ readTorrent fn = do
 		then (map bString . bList) =<< (bList $ fromJust mal)
 		else [bString $ fromJust $ lookup "announce" dict]
 	let binfo = fromJust $ lookup "info" dict
-	let ih = hash $ B.unpack $ bPack binfo
+	let ih = sha1 $ bPack binfo
 	let info = bDict $ binfo
 	let len = fromIntegral $ bInt $ fromJust $ lookup "length" info
 	let name = bString $ fromJust $ lookup "name" info
@@ -81,7 +60,7 @@ readTorrent fn = do
 	let pieces = bString $ fromJust $ lookup "pieces" info
 	return $ TorrentFile {
 		trackers = al,
-		TorrentFile.length = len,
+		Types.length = len,
 		name = name,
 		pieceLength = plength,
 		pieces = pieces,

@@ -9,6 +9,7 @@ License-file:   LICENSE
 
 Build-Type:     Simple
 Cabal-Version:  >= 1.2
+Tested-With:    GHC == 7.6.1
 
 Executable      9ptorrent
         Main-is:        9ptorrent.hs
@@ -16,10 +17,10 @@ Executable      9ptorrent
 -- If the stuff works with the older versions, you're welcome to fix them
         Build-depends:  
                         base >= 4 && < 5,
-                        bytestring >= 0.9.1.7 && < 0.10,
+                        bytestring >= 0.9.1.7 && < 0.11,
                         network >= 2.3 && < 2.5,
                         Network-NineP >= 0.1.0 && < 0.2,
-                        containers >= 0.3.0.0 && < 0.5,
+                        containers >= 0.3.0.0 && < 0.6,
                         mtl >= 1.1.1.0 && < 2.2,
                         bencode >= 0.5 && < 0.6,
                         Crypto >= 4.2.0 && < 4.3,
@@ -31,4 +32,6 @@ Executable      9ptorrent
                         data-accessor-template >= 0.2.1.10 && < 0.3,
                         data-accessor >= 0.2.2.3 && < 0.3,
                         mstate >= 0.2.4 && < 0.3,
-                        transformers >= 0.3.0.0 && < 0.4
+                        transformers >= 0.3.0.0 && < 0.4,
+                        stm >= 2.4 && < 2.5,
+                        string-class >= 0.1.5.1 && < 0.2
