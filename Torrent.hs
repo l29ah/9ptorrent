@@ -35,7 +35,11 @@ addTorrent fn = do
 		tm <- readTVar $ torrents s
 		writeTVar (torrents s) $ M.insert (infoHash $ torrentFile t) t tm
 
---delTorrent :: InfoHash -> NPT ()
+addPeer :: InfoHash -> Address -> NPT ()
+addPeer ih addr = undefined
+
+delTorrent :: InfoHash -> NPT ()
+delTorrent ih = undefined
 
 trackerPoker :: Torrent -> NPT ()
 trackerPoker t = forever $ do

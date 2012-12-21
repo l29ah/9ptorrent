@@ -3,6 +3,7 @@
 module Types
 	( module Data.Word
 	, module Control.Concurrent.STM.TVar
+	, module Control.Monad
 	, Address
 	, Host(..)
 	, BlockSize
@@ -19,7 +20,7 @@ module Types
 	, genDHTNodeID
 	, QueryDB(..)
 	, QDBItem(..)
-	, TransactionID(..)
+	, KRPCTransactionID(..)
 	, KRPCMessage(..)
 	, DPayload(..)
 	, DQuery(..)
@@ -28,6 +29,7 @@ module Types
 
 import Control.Concurrent
 import Control.Concurrent.STM.TVar
+import Control.Monad
 import Data.Bits
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as B
@@ -101,16 +103,16 @@ data Torrent = Torrent {
 	trackerPokerThread :: ThreadId
 } --deriving Show
 
-type TransactionID = ByteString
-type AnnToken = ByteString
+type KRPCTransactionID = ByteString
+type KRPCAnnToken = ByteString
 
 data KRPCMessage = KRPC {
-	ktid :: TransactionID,
+	ktid :: KRPCTransactionID,
 	kpld :: DPayload
 } deriving Show
-data DPayload = PQuery DHTNodeID DQuery | PResponse DHTNodeID DResponse | PError Integer ByteString deriving Show
-data DQuery = QPing | QFindNode DHTNodeID | QGetPeers InfoHash | QAnnouncePeer InfoHash PortNumber AnnToken deriving Show
-data DResponse = RPing | RFindNode [(DHTNodeID, Address)] | RGetPeers (Either [(DHTNodeID, Address)] [Address]) AnnToken | RAnnouncePeer deriving Show
+data DPayload = PQuery DHTNodeID DQuery | PResponse DHTNodeID QDBItem DResponse | PError Integer ByteString deriving Show
+data DQuery = QPing | QFindNode DHTNodeID | QGetPeers InfoHash | QAnnouncePeer InfoHash PortNumber KRPCAnnToken deriving Show
+data DResponse = RPing | RFindNode [(DHTNodeID, Address)] | RGetPeers (Either [(DHTNodeID, Address)] [Address]) KRPCAnnToken | RAnnouncePeer deriving Show
 
-type QueryDB = Map TransactionID QDBItem
-data QDBItem = TPing | TFindNode | TGetPeers | TAnnouncePeer deriving Show
+type QueryDB = Map KRPCTransactionID QDBItem
+data QDBItem = TPing | TFindNode | TGetPeers InfoHash | TAnnouncePeer deriving Show

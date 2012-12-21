@@ -25,21 +25,35 @@ import Types
 import State
 import BEncode
 import CompactEncoding
+import Torrent
 
 --dHTWorker :: NPT ()
 --dHTWorker = do
 --	s <- ask
 
-getKRPCMessage :: ByteString -> NPT ()
-getKRPCMessage b = do
+getKRPCMessage :: (ByteString -> NPT ()) -> ByteString -> NPT ()
+getKRPCMessage answer b = do
 	s <- ask
+	let mynid = dHTNodeID s
 	qdb <- liftIO $ atomically $ readTVar $ queryDB s
 	let KRPC tid pld = decodeKRPCMessage b qdb
 	case pld of
-		PQuery nid q -> do
-			return ()
-		PResponse nid r -> do
-			return ()
+		PQuery nid q ->
+			let respond = answer . encodeKRPCMessage . KRPC tid . PResponse mynid undefined in
+			case q of
+				QPing -> respond $ RPing
+				QFindNode target -> return ()
+				QGetPeers ih -> return ()
+				QAnnouncePeer ih port tok -> return ()
+		PResponse nid qdbi r -> case r of
+			RPing -> return ()
+			RFindNode nodes -> return ()
+			RGetPeers gp tok -> case gp of
+				Left nodes -> return ()
+				Right peers ->
+					let TGetPeers ih = qdbi in
+					mapM_ (addPeer ih) peers
+			RAnnouncePeer -> return ()
 		PError code msg -> log msg
 
 decodeKRPCMessage :: ByteString -> QueryDB -> KRPCMessage
@@ -71,12 +85,12 @@ decodeKRPCMessage b qdb = do
 			let	r = bDict $ fromJust $ M.lookup "r" d
 				sid = bString $ fromJust $ M.lookup "id" r
 				t = fromJust $ M.lookup tid qdb in
-			PResponse sid $ case t of
-				TPing -> RPing
-				TFindNode ->
+			PResponse sid t $ case t of
+				TPing {} -> RPing
+				TFindNode {} ->
 					let	nodes = getCNI $ bString $ fromJust $ M.lookup "nodes" r in
 					RFindNode nodes
-				TGetPeers ->
+				TGetPeers {} ->
 					let	mv = M.lookup "values" r
 						token = bString $ fromJust $ M.lookup "token" r in
 					case mv of
@@ -86,7 +100,7 @@ decodeKRPCMessage b qdb = do
 						Nothing ->
 							let	nodes = getCNI $ bString $ fromJust $ M.lookup "nodes" r in
 							RGetPeers (Left nodes) token
-				TAnnouncePeer -> RAnnouncePeer
+				TAnnouncePeer {} -> RAnnouncePeer
 		"e" -> 
 			let e_ = bList $ fromJust $ M.lookup "e" d in
 			PError (bInt $ e_!!0) (bString $ e_!!1)
@@ -112,7 +126,7 @@ encodeKRPCMessage (KRPC tid pld) = bPack $ BDict $ M.fromList $
 								("info_hash", BString ih),
 								("port", BInt $ fromIntegral $ fromEnum port),
 								("token", BString tok)])]
-		PResponse nid r -> ("y", BString "r") : case r of
+		PResponse nid _ r -> ("y", BString "r") : case r of
 			RPing -> [("r", BDict $ M.fromList $ [
 								("id", BString nid)])]
 			RFindNode nodes -> [("r", BDict $ M.fromList $ [

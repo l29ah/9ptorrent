@@ -2,6 +2,7 @@
 
 module Tracker where
 
+import Control.Exception
 import Control.Monad.EmbedIO
 --import Data.Binary.Strict.Get
 import Data.ByteString.Lazy (ByteString)
@@ -10,14 +11,19 @@ import qualified Data.ByteString.Lazy.Char8 as BC8
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Serialize.Get
-import Data.String.Class
+import Data.Serialize.Builder as CB hiding (append)
+import Data.String.Class as S
 import Data.Word
+import Data.Monoid
 import Network.HTTP hiding (Response)	-- HTTP doesn't support IPv6; using only urlencode from it
 --import Network.Curl	-- Curl breaks responses at unusual symbols
 import Network.Curl.Download
 import Network
+import Network.Socket hiding (send, recv)
+import Network.Socket.ByteString.Lazy
 import Numeric
-import Prelude hiding (log, concat)
+import Prelude as P hiding (log, concat)
+import System.Random
 
 import State
 import Types
@@ -26,7 +32,7 @@ import BEncode
 import CompactEncoding
 
 data RPeer = RPeer {
-	id :: ByteString,
+	id :: Maybe PeerID,
 	address :: Address
 } deriving Show
 
@@ -45,15 +51,17 @@ pokeTrackers :: Torrent -> NPT ()
 pokeTrackers torrent = do
 		let tf = torrentFile torrent
 		--let ht = httpTrackers $ trackers tf
-		mapM_ (forkE . pokeTracker torrent) $ trackers tf
+		--mapM_ (forkE . pokeTracker torrent) $ trackers tf
+		mapM_ (handleE (\(e :: SomeException) -> log $ show e) . pokeTracker torrent) $ trackers tf
 	
 pokeTracker :: Torrent -> ByteString -> NPT ()
 pokeTracker t tr = do
+	log $ append "Poking tracker: " tr
 	resp <- pokeTracker_ t tr
 	log $ append "Response: " $ show resp
 
 pokeTracker_ t tr | B.isPrefixOf "http://" tr = pokeHTTPTracker t tr
---pokeTracker_ tr | B.isPrefixOf "udp://" = pokeUDPTracker tr
+pokeTracker_ t tr | B.isPrefixOf "udp://" tr = pokeUDPTracker t tr
 pokeTracker_ _ _ = return Nothing
 
 
@@ -63,6 +71,95 @@ pokeTracker_ _ _ = return Nothing
 --
 --udpTrackers :: [ByteString] -> [ByteString]
 --udpTrackers l = filter (B.isPrefixOf "udp://") l
+{-
+Time outs
+
+UDP is an 'unreliable' protocol. This means it doesn't retransmit lost packets itself. The application is responsible for this. If a response is not received after 15 * 2 ^ n seconds, the client should retransmit the request, where n starts at 0 and is increased up to 8 (3840 seconds) after every retransmission. Note that it is necessary to rerequest a connection ID when it has expired.
+ -}
+
+type TransactionID = Word32
+type ConnectionID = Word64
+data Event = ENone | ECompleted | EStarted | EStopped
+data TUDPQuery = QConnect TransactionID | QAnnounce ConnectionID TransactionID InfoHash PeerID Word64 Word64 Word64 Event (Maybe HostAddress) Word32 Word32 PortNumber
+data TUDPResponse	= RConnect TransactionID ConnectionID
+			| RAnnounce {
+				ratid :: TransactionID,
+				rainterval :: Word32,
+				raleechers :: Word32,
+				raseeders :: Word32,
+				rapeers :: [Address]
+			} deriving Show
+
+putEv ENone = putWord32be 0
+putEv ECompleted = putWord32be 1
+putEv EStarted = putWord32be 2
+putEv EStopped = putWord32be 3
+
+putTUDPQuery :: TUDPQuery -> Builder
+putTUDPQuery (QConnect tid) = mconcat [
+	putWord64be 0x41727101980,
+	putWord32be 0,
+	putWord32be tid]
+putTUDPQuery (QAnnounce cid tid ih pid down left up ev addr key want port) = mconcat [
+	putWord64be cid,
+	putWord32be 1,
+	putWord32be tid,
+	CB.fromLazyByteString ih,
+	CB.fromLazyByteString pid,
+	putWord64be down,
+	putWord64be left,
+	putWord64be up,
+	putEv ev,
+	putIP4 $ fromMaybe 0 addr,
+	putWord32be key,
+	putWord32be want,
+	putPort port]
+
+getTUDPResponse :: Get TUDPResponse
+getTUDPResponse = do
+	action <- getWord32be
+	case action of
+		0 -> do
+			tid <- getWord32be
+			cid <- getWord64be
+			return $ RConnect tid cid
+		1 -> do
+			tid <- getWord32be
+			interval <- getWord32be
+			leechers <- getWord32be
+			seeders <- getWord32be
+			rem <- remaining
+			peers <- sequence $ replicate (rem `div` 6) $ getCompactPeer4
+			return $ RAnnounce tid interval leechers seeders peers
+
+pokeUDPTracker :: Torrent -> ByteString -> NPT (Maybe Response)
+pokeUDPTracker torrent t_ = do
+	s <- ask
+	let peerid = peerID s
+	let tf = torrentFile torrent
+	lp <- liftIO $ atomically $ readTVar $ listeningPort s
+
+	-- presume we got "udp://tracker.publicbt.com:80" format
+	let (host, port_) = BC8.break (== ':') $ S.drop 6 t_
+	let port = toEnum $ (read $ P.tail $ toString port_ :: Int) :: PortNumber
+	sock <- liftIO $ socket AF_INET Datagram 0
+	--ha <- liftIO $ inet_addr "127.0.0.1"
+	(AddrInfo { addrAddress = SockAddrInet _ addr }):_ <- liftIO $ getAddrInfo (Just $ AddrInfo [] AF_INET Datagram defaultProtocol undefined Nothing) (Just $ toString host) Nothing
+	liftIO $ connect sock $ SockAddrInet port addr
+
+	let say = liftIO . send sock . CB.toLazyByteString . putTUDPQuery 
+	let hear = liftIO $ liftM ((\(Right nya) -> nya) . runGetLazy getTUDPResponse) $ recv sock 9000 
+
+	t1id <- liftIO randomIO
+	say $ QConnect t1id
+	RConnect t1id_ cid <- hear
+	when (t1id /= t1id_) $ fail "FIXME got some other transaction ID"
+
+	t2id <- liftIO randomIO
+	say $ QAnnounce cid t2id (infoHash tf) peerid 0 0 0 ENone Nothing 0 (-1) lp
+	ra <- hear
+	when (t2id /= ratid ra) $ fail "FIXME got some other transaction ID"
+	return $ Just $ Response (rainterval ra) (rainterval ra) $ map (RPeer Nothing) $ rapeers ra
 
 pokeHTTPTracker :: Torrent -> ByteString -> NPT (Maybe Response)
 pokeHTTPTracker torrent t_ = do
@@ -127,8 +224,8 @@ parsePeers_ d = let	mp4 = M.lookup "peers" d
 
 parsePeers :: BEncode -> [RPeer]
 parsePeers (BDict d) = error "Traditional peer lists are unsupported. Send me an example of one plzkthx."
-parsePeers (BString d) = map (RPeer "") $ getList d getCompactPeer4
+parsePeers (BString d) = map (RPeer Nothing) $ getList d getCompactPeer4
 
 parsePeers6 :: BEncode -> [RPeer]
 parsePeers6 (BDict d) = error "Traditional peer lists are unsupported for IPv6. Send me an example of one plzkthx."
-parsePeers6 (BString d) = map (RPeer "") $ getList d getCompactPeer6
+parsePeers6 (BString d) = map (RPeer Nothing) $ getList d getCompactPeer6

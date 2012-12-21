@@ -7,13 +7,19 @@ module CompactEncoding
 	, getCompactPeer4
 	, getCompactPeer6
 	, putCompactPeer
+	, getIP4
+	, putIP4
+	, getPort
+	, putPort
 	, getCNI
 	) where
 
+import Control.Monad
 import Data.ByteString.Lazy (ByteString)
 import Data.Monoid
 import Data.Serialize.Builder
 import Data.Serialize.Get
+import Network.Socket.Internal
 import Numeric
 
 import Types
@@ -38,23 +44,29 @@ getCompactNodeInfo = do
 putCompactNodeInfo :: (DHTNodeID, Address) -> Builder
 putCompactNodeInfo (nid, a) = mconcat [fromLazyByteString nid, putCompactPeer a]
 
+getIP4 = getWord32host
+getPort = liftM PortNum getWord16host
+
+putIP4 = putWord32host
+putPort (PortNum port) = putWord16host port
+
 getCompactPeer4 :: Get Address
 getCompactPeer4 = do
 	--i1 <- getWord8
 	--i2 <- getWord8
 	--i3 <- getWord8
 	--i4 <- getWord8
-	i <- getWord32host
-	p <- getWord16host
+	i <- getIP4
+	p <- getPort
 	--return $ ((show i1 ++ "." ++ show i2 ++ "." ++ show i3 ++ "." ++ show i4), toEnum $ fromEnum p)
-	return $ (IP4 i, fromIntegral p)
+	return $ (IP4 i, p)
 
 putCompactPeer :: Address -> Builder
 putCompactPeer (hn, p) = mconcat [putCompactHost hn, putWord16host $ fromIntegral p]
 
 putCompactHost :: Host -> Builder
 putCompactHost (StringName n) = undefined
-putCompactHost (IP4 ip) = putWord32host ip
+putCompactHost (IP4 ip) = putIP4 ip
 putCompactHost (IP6 (i1, i2, i3, i4)) = undefined
 
 getCompactPeer6 :: Get Address
@@ -72,7 +84,7 @@ getCompactPeer6 = do
 	i2 <- getWord32be
 	i3 <- getWord32be
 	i4 <- getWord32be
-	p <- getWord16host
+	p <- getPort
 	--return $ ((
 	--		s i1 ":" ++
 	--		s i2 ":" ++
@@ -82,4 +94,4 @@ getCompactPeer6 = do
 	--		s i6 ":" ++
 	--		s i7 ":" ++
 	--		s i8 []), toEnum $ fromEnum p)
-	return (IP6 (i1, i2, i3, i4), fromIntegral p)
+	return (IP6 (i1, i2, i3, i4), p)

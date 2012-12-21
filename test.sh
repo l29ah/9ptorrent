@@ -9,5 +9,6 @@ cabal-dev build && {
 	sleep 1
 	9mount $NPTORRENT_ADDRESS test
 	#printf Bruce\ Hood\ -\ The\ Self\ Illusion:\ How\ the\ Social\ Brain\ Creates\ Identity.mobi.8d076d21e33a449f.torrent >> test/add_torrent
-	printf Michael\ Pollan\ -\ Food\ Rules:\ An\ Eater\'s\ Manual.epub.torrent >> test/add_torrent
+	#printf Michael\ Pollan\ -\ Food\ Rules:\ An\ Eater\'s\ Manual.epub.torrent >> test/add_torrent
+	printf Covox_-_Strike_EP.7908444.TPB.torrent >> test/add_torrent
 }
