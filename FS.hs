@@ -23,7 +23,25 @@ import Torrent
 import TorrentFile
 import Tracker
 
-configDir = boringDir "config" []
+mkDir :: String -> [(String, NPT (NineFile NPT))] -> NPT (NineFile NPT)
+--mkDir [] = return []
+--mkDir ((n,a):xs) = do
+--	return $ (n, f) : mkDir xs
+mkDir name contents = do
+	let (ns, as) = unzip contents
+	fs <- sequence as
+	return $ boringDir name $ zip ns fs
+
+tVar v = (atomically $ readTVar v, atomically . writeTVar v)
+
+useRetrackerF :: NPT (NineFile NPT)
+useRetrackerF = do
+	s <- ask
+	return $ simpleFile "use_retracker" (tVar $ useRetracker s) booleans
+
+configDir = mkDir "config" [
+		("use_retracker", useRetrackerF)
+	]
 torrentsDir = boringDir "torrents" []
 
 sniffE :: NPT a -> NPT a
@@ -54,11 +72,12 @@ addTorrentFile = do
 -}
 --addTorrentFile :: NPT (NineFile NPT)
 addTorrentFile = rwFile "add_torrent" Nothing $ Just $ sniffE . addTorrent
-	
+
+addConfigUseRetracker = rwFile "retracker" Nothing $ Just $ sniffE . addTorrent
 
 addLogFile :: Chan ByteString -> IO (NineFile NPT)
 addLogFile c = do
-	return $ chanFile "log" (Just c) Nothing
+	return $ simpleFile "log" (heterObj (chans c undefined) nulls) lazyByteStrings
 
 runFS :: Chan ByteString -> NPT ()
 runFS lc = do
@@ -68,9 +87,10 @@ runFS lc = do
 	let atf = addTorrentFile
 	-- launch the filesystem
 	s <- ask
+	cd <- configDir
 	lift $ run9PServer $ Config {
 		root = boringDir "/" [
-			("config", configDir),
+			("config", cd),
 			("torrents", torrentsDir),
 			("add_torrent", atf),
 			("log", logf)

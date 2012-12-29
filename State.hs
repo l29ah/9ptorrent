@@ -48,7 +48,10 @@ data NPTState = NPTState {
 	listeningPortDHT :: TVar PortNumber,
 	dHTNodeID :: DHTNodeID,
 	bootstrapNodes :: [Address],
-	queryDB :: TVar QueryDB
+	queryDB :: TVar QueryDB,
+
+	-- misc
+	useRetracker :: TVar Bool
 }
 
 emptyState :: Chan ByteString -> IO NPTState
@@ -58,6 +61,7 @@ emptyState lc = do
 	lpd <- newTVarIO 43788
 	tors <- newTVarIO M.empty
 	qdb <- newTVarIO M.empty
+	urt <- newTVarIO False
 	pid <- genPeerID
 	nid <- genDHTNodeID
 	return $ NPTState {
@@ -72,7 +76,8 @@ emptyState lc = do
 		peerID = pid,
 		dHTNodeID = nid,
 		torrents = tors,
-		queryDB = qdb
+		queryDB = qdb,
+		useRetracker = urt
 	}
 
 -- $( deriveAccessors ''NPTState )

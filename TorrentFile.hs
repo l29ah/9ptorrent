@@ -7,8 +7,10 @@ import Control.Exception
 import Control.Monad
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as B
+import Data.List (intercalate)
 import Data.Map hiding (map)
 import Data.Maybe
+import Data.String.Class
 import Data.Word
 import Prelude hiding (readFile, lookup)
 
@@ -54,13 +56,17 @@ readTorrent fn = do
 	let binfo = fromJust $ lookup "info" dict
 	let ih = sha1 $ bPack binfo
 	let info = bDict $ binfo
-	let len = fromIntegral $ bInt $ fromJust $ lookup "length" info
+	let fl = case lookup "length" info of
+		Just len -> Left $ fromIntegral $ bInt $ len
+		Nothing -> Right $ map (\d -> let dl x = fromJust $ lookup x $ bDict d in
+						(fromIntegral $ bInt $ dl "length", intercalate "/" $ map (toString . bString) $ bList $ dl "path")) $ bList $ fromJust $ lookup "files" info
+	let mlen = fromIntegral $ bInt $ fromJust $ lookup "length" info
 	let name = bString $ fromJust $ lookup "name" info
 	let plength = fromIntegral $ bInt $ fromJust $ lookup "piece length" info
 	let pieces = bString $ fromJust $ lookup "pieces" info
 	return $ TorrentFile {
 		trackers = al,
-		Types.length = len,
+		filesLength = fl,
 		name = name,
 		pieceLength = plength,
 		pieces = pieces,

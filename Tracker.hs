@@ -49,10 +49,13 @@ listenPort = 6881
 
 pokeTrackers :: Torrent -> NPT ()
 pokeTrackers torrent = do
-		let tf = torrentFile torrent
-		--let ht = httpTrackers $ trackers tf
-		--mapM_ (forkE . pokeTracker torrent) $ trackers tf
-		mapM_ (handleE (\(e :: SomeException) -> log $ show e) . pokeTracker torrent) $ trackers tf
+	s <- ask
+	let tf = torrentFile torrent
+	urt <- liftIO $ atomically $ readTVar $ useRetracker s
+	let tracks = if urt then "retracker.local" : trackers tf else trackers tf
+	--let ht = httpTrackers $ trackers tf
+	--mapM_ (forkE . pokeTracker torrent) $ trackers tf
+	mapM_ (handleE (\(e :: SomeException) -> log $ show e) . pokeTracker torrent) tracks
 	
 pokeTracker :: Torrent -> ByteString -> NPT ()
 pokeTracker t tr = do

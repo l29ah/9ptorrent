@@ -15,6 +15,7 @@ module Types
 	, InfoHash
 	, PeerID
 	, genPeerID
+	, Peer(..)
 	, sha1
 	, DHTNodeID
 	, genDHTNodeID
@@ -53,8 +54,8 @@ data Block = Block { blockOffset :: Int        -- ^ offset of this block within 
 type PieceNum = Int
 
 type InfoHash = ByteString
-
 type DHTNodeID = InfoHash
+type PieceHash = InfoHash
 
 sha1 :: ByteString -> InfoHash
 sha1 s = hashByteString $ hash $ B.unpack s
@@ -83,17 +84,26 @@ genDHTNodeID = do
 	--let r = (take 20 $ randoms g) :: [Word8]
 	return $ B.pack (take 20 $ randoms g)
 
+type Pieces = ByteString
+
 data TorrentFile = TorrentFile {
 	trackers :: [ByteString],
 	name :: ByteString,
-	length :: Word64,
+	filesLength :: Either Word64 [(Word64, FilePath)],
 	pieceLength :: Word64,
-	pieces :: ByteString,
+	pieces :: Pieces,
 	infoHash :: InfoHash
 } deriving Show
 
+-- unsafe
+getPieceHash :: TorrentFile -> PieceNum -> PieceHash
+getPieceHash t n = B.take 20 $ B.drop (fromIntegral $ n * 20) $ pieces t
+
+checkPieceHash :: TorrentFile -> PieceNum -> ByteString -> Bool
+checkPieceHash t n s = sha1 s == getPieceHash t n
+
 data Peer = Peer {
-	id :: ByteString,
+	--id :: PeerID,
 	address :: Address
 } deriving Show
 

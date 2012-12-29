@@ -36,7 +36,14 @@ addTorrent fn = do
 		writeTVar (torrents s) $ M.insert (infoHash $ torrentFile t) t tm
 
 addPeer :: InfoHash -> Address -> NPT ()
-addPeer ih addr = undefined
+addPeer ih addr = do
+	s <- ask
+	tm <- liftIO $ atomically $ readTVar $ torrents s
+	let Just t = M.lookup ih tm
+	liftIO $ atomically $ do
+		peers <- readTVar $ knownPeers t
+		writeTVar (knownPeers t) $ Peer addr : peers
+
 
 delTorrent :: InfoHash -> NPT ()
 delTorrent ih = undefined
