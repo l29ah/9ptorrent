@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy.Char8  as B
 import Data.Word
 import Network.NineP
 import Network.NineP.File
+import Network.NineP.File.Instances
 import Prelude hiding (log)
 import System.Environment
 import System.IO
@@ -37,7 +38,7 @@ tVar v = (atomically $ readTVar v, atomically . writeTVar v)
 useRetrackerF :: NPT (NineFile NPT)
 useRetrackerF = do
 	s <- ask
-	return $ simpleFile "use_retracker" (tVar $ useRetracker s) booleans
+	return . join (simpleFile "use_retracker") $ useRetracker s
 
 configDir = mkDir "config" [
 		("use_retracker", useRetrackerF)
@@ -77,7 +78,7 @@ addConfigUseRetracker = rwFile "retracker" Nothing $ Just $ sniffE . addTorrent
 
 addLogFile :: Chan ByteString -> IO (NineFile NPT)
 addLogFile c = do
-	return $ simpleFile "log" (heterObj (chans c undefined) nulls) lazyByteStrings
+	return $ simpleFile "log" c ()
 
 runFS :: Chan ByteString -> NPT ()
 runFS lc = do
